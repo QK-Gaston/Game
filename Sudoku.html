@@ -56,7 +56,6 @@
     padding:0;
   }
   table.board td .num{white-space:nowrap;overflow:hidden;}
-
   /* 标记面板：完全交给JS设置top/left，CSS不写死位置 */
   .mark-panel{
     position:absolute;
@@ -74,7 +73,6 @@
     text-align:center;
     line-height:1.4;
   }
-
   /* 宫格粗边框 */
   table.board td.blk-right{border-right:2px solid var(--line-bold);}
   table.board td.blk-bottom{border-bottom:2px solid var(--line-bold);}
@@ -133,13 +131,14 @@
   <div class="mark-panel" id="markPanel"></div>
 </div>
 <div class="keypad" id="keypad"></div>
-<div class="win" id="win">恭喜通关！再来一局！</div>
+<div class="win" id="win">🐦世界和平啦~~</div>
 <script>
 "use strict";
+// ✅全部改为9*9，仅holes(挖空数量)、cell格子大小区分难度；按钮文字不变
 const LEVELS = {
-  easy:   { label:"小学生", N:3, br:3, bc:3, holes:3,  cell:72, font:30, keypadRow:9 },
-  medium: { label:"初中生", N:6, br:3, bc:3, holes:18, cell:46, font:22, keypadRow:9 },
-  hard:   { label:"高中生", N:9, br:3, bc:3, holes:38, cell:36, font:20, keypadRow:9 },
+  easy:   { label:"小学生", N:9, br:3, bc:3, holes:40,  cell:36, font:20, keypadRow:9  },
+  medium: { label:"初中生", N:9, br:3, bc:3, holes:50,  cell:36, font:20, keypadRow:9 },
+  hard:   { label:"高中生", N:9, br:3, bc:3, holes:60,  cell:36, font:20, keypadRow:9 },
 };
 const state = {
   level: "easy",
@@ -241,7 +240,6 @@ function generate(cfg){
   }
   return {puzzle, answer};
 }
-
 function renderMarkPanel(){
   const panel = document.getElementById("markPanel");
   const sel = state.selected;
@@ -261,28 +259,21 @@ function renderMarkPanel(){
   }
   panel.innerHTML = html;
 }
-
-// 更新标记面板坐标：棋盘右边界向外2px；垂直对齐选中格子顶部
+// 更新标记面板坐标：棋盘右边界向外2px；垂直对齐整张棋盘右上角格子顶部
 function updateMarkPanelPos(r,c){
   const boardEl = document.getElementById("board");
   const panel = document.getElementById("markPanel");
-  // 固定取【第一行、最后一列】的格子：整张棋盘右上角单元格
   const topRightTd = boardEl.querySelector('tr:first-child > td:last-child');
   if(!topRightTd) return;
-
   const leftPos = boardEl.offsetLeft + boardEl.offsetWidth + 2;
   const topPos = topRightTd.offsetTop;
-
   panel.style.left = leftPos + "px";
   panel.style.top = topPos + "px";
 }
-
-
 function toggleNoteMode(){
   state.noteMode = !state.noteMode;
   renderKeypad();
 }
-
 const keypadEl = document.getElementById("keypad");
 const statusEl = document.getElementById("status");
 const winEl = document.getElementById("win");
@@ -401,14 +392,13 @@ function selectCell(r,c){
   state.selected={r,c};
   applyHighlights();
   renderMarkPanel();
-  updateMarkPanelPos(r,c); // 切换格子更新面板坐标
+  updateMarkPanelPos(r,c);
 }
 function placeNumber(val){
   const sel=state.selected;
   if(!sel) return;
   const {r,c}=sel;
   if(state.given[r][c]) return;
-
   if(state.noteMode){
     const arr = state.markNotes[r][c];
     const idx = arr.indexOf(val);
