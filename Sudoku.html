@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>数独</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<style>
+  :root{
+    --pink:#f8cfea;
+    --pink-strong:#f087c1;
+    --line:#c9c9c9;
+    --line-bold:#555;
+    --ink:#000;
+    --ink-faint:rgba(0,0,0,.5);
+    --bg:#ffffff;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;margin:0;padding:0;}
+  html,body{height:100%;}
+  body{
+    background:var(--bg);
+    color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue",sans-serif;
+    display:flex;flex-direction:column;align-items:center;
+    padding:calc(env(safe-area-inset-top) + 10px) 10px calc(env(safe-area-inset-bottom) + 10px);
+    max-width:560px;margin:0 auto;
+  }
+  header{width:100%;display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+  h1{font-size:20px;font-weight:700;}
+  .status{font-size:15px;color:#666;}
+  /* 难度切换 */
+  .tabs{display:flex;gap:8px;width:100%;margin-bottom:12px;}
+  .tabs button{
+    flex:1;padding:9px 0;border:1px solid var(--line);background:#fff;border-radius:10px;
+    font-size:15px;color:#333;cursor:pointer;
+  }
+  .tabs button.active{background:var(--pink-strong);border-color:var(--pink-strong);color:#000;font-weight:600;}
+  /* 棋盘容器：relative */
+  .board-wrap{
+    width:100%;
+    position:relative;
+    overflow-x:auto;
+    -webkit-overflow-scrolling:touch;
+  }
+  table.board{
+    border-collapse:collapse;
+    background:#fff;
+    table-layout:fixed;
+    margin:0 auto;
+  }
+  table.board td{
+    border:1px solid var(--line);
+    text-align:center;vertical-align:middle;
+    cursor:pointer;position:relative;
+    padding:0;
+  }
+  table.board td .num{white-space:nowrap;overflow:hidden;}
+
+  /* 标记面板：完全交给JS设置top/left，CSS不写死位置 */
+  .mark-panel{
+    position:absolute;
+    min-width:28px;
+    padding:0;
+    display:flex;
+    flex-direction:column;
+    justify-content:flex-start;
+    gap:2px;
+  }
+  .mark-item{
+    font-size:18px;
+    font-weight:bold;
+    color:#0044dd;
+    text-align:center;
+    line-height:1.4;
+  }
+
+  /* 宫格粗边框 */
+  table.board td.blk-right{border-right:2px solid var(--line-bold);}
+  table.board td.blk-bottom{border-bottom:2px solid var(--line-bold);}
+  table.board td.edge-right{border-right:2px solid var(--line-bold);}
+  table.board td.edge-bottom{border-bottom:2px solid var(--line-bold);}
+  table.board td.edge-left {border-left: 2px solid var(--line-bold);}
+  table.board td.edge-top {border-top: 2px solid var(--line-bold);}
+  table.board td.blk-left {border-left: 2px solid var(--line-bold);}
+  table.board td.blk-top {border-top: 2px solid var(--line-bold);}
+  table.board td .num{display:block;line-height:1;}
+  td.given .num{color:var(--ink-faint);}
+  td.user .num{color:var(--ink);}
+  td.hl-line{background:var(--pink);}
+  td.hl-same{background:var(--pink-strong);}
+  td.selected{background:var(--pink-strong);}
+  td.error .num{color:#d62828;}
+  /* 底部数字键盘 */
+  .keypad{
+    width:100%;margin-top:14px;display:grid;gap:8px;
+  }
+  .keypad .row{display:grid;gap:8px;}
+  .keypad button{
+    border:1px solid var(--line);background:#fff;border-radius:12px;
+    font-size:22px;font-weight:600;color:#000;padding:12px 0;cursor:pointer;
+  }
+  .keypad button:active{background:var(--pink);}
+  .keypad button.note-active{
+    background:#cce0ff;
+    border-color:#0044dd;
+  }
+  .keypad button.used{
+    visibility:hidden;pointer-events:none;opacity:0;
+  }
+  .keypad .util{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;}
+  .keypad .util button{flex:1 1 40%;font-size:14px;font-weight:500;padding:10px 0;}
+  .win{
+    margin-top:12px;width:100%;text-align:center;font-size:16px;font-weight:600;color:#1a7f37;
+    display:none;
+  }
+  .hint{font-size:20px;color:#ebabdb;text-align:center;flex:1;margin:0 8px;}
+</style>
+</head>
+<body>
+<header>
+  <h1>数独</h1>
+  <div class="hint">💗希望世界和平💗</div>
+  <div class="status" id="status">小学生</div>
+</header>
+<div class="tabs" id="tabs">
+  <button data-level="easy" class="active">斧子哥</button>
+  <button data-level="medium">橘子哥</button>
+  <button data-level="hard">宽子哥</button>
+</div>
+<div class="board-wrap">
+  <table class="board" id="board"></table>
+  <div class="mark-panel" id="markPanel"></div>
+</div>
+<div class="keypad" id="keypad"></div>
+<div class="win" id="win">恭喜通关！再来一局！</div>
+<script>
+"use strict";
+const LEVELS = {
+  easy:   { label:"小学生", N:3, br:3, bc:3, holes:3,  cell:72, font:30, keypadRow:9 },
+  medium: { label:"初中生", N:6, br:3, bc:3, holes:18, cell:46, font:22, keypadRow:9 },
+  hard:   { label:"高中生", N:9, br:3, bc:3, holes:38, cell:36, font:20, keypadRow:9 },
+};
+const state = {
+  level: "easy",
+  cfg: LEVELS.easy,
+  puzzle: [],
+  answer: [],
+  grid: [],
+  given: [],
+  selected: null,
+  markNotes: [],
+  noteMode: false,
+};
+const rnd = n => Math.floor(Math.random()*n);
+const shuffle = arr => {
+  for(let i=arr.length-1;i>0;i--){const j=rnd(i+1);[arr[i],arr[j]]=[arr[j],arr[i]];}
+  return arr;
+};
+function toSym(v){
+  return v===0 ? "" : String(v);
+}
+function canPlace(grid, cfg, r, c, v){
+  const N=cfg.N, br=cfg.br, bc=cfg.bc;
+  for(let i=0;i<N;i++){
+    if(grid[r][i]===v) return false;
+    if(grid[i][c]===v) return false;
+  }
+  const r0=Math.floor(r/br)*br, c0=Math.floor(c/bc)*bc;
+  for(let i=r0;i<r0+br;i++){
+    for(let j=c0;j<c0+bc;j++){
+      if(grid[i][j]===v) return false;
+    }
+  }
+  return true;
+}
+function fillSolution(cfg){
+  const N=cfg.N;
+  const grid=Array.from({length:N},()=>Array(N).fill(0));
+  function bt(){
+    let er=-1,ec=-1;
+    outer:
+    for(let r=0;r<N;r++) for(let c=0;c<N;c++){
+      if(grid[r][c]===0){er=r;ec=c;break outer;}
+    }
+    if(er===-1) return true;
+    const nums=shuffle([1,2,3,4,5,6,7,8,9]);
+    for(const v of nums){
+      if(canPlace(grid,cfg,er,ec,v)){
+        grid[er][ec]=v;
+        if(bt()) return true;
+        grid[er][ec]=0;
+      }
+    }
+    return false;
+  }
+  bt();
+  return grid;
+}
+function countSolutions(grid, cfg, limit){
+  const N=cfg.N;
+  let count=0;
+  function bt(){
+    if(count>=limit) return;
+    let er=-1,ec=-1;
+    outer:
+    for(let r=0;r<N;r++) for(let c=0;c<N;c++){
+      if(grid[r][c]===0){er=r;ec=c;break outer;}
+    }
+    if(er===-1){count++;return;}
+    for(let v=1;v<=9;v++){
+      if(canPlace(grid,cfg,er,ec,v)){
+        grid[er][ec]=v;
+        bt();
+        grid[er][ec]=0;
+        if(count>=limit) return;
+      }
+    }
+  }
+  bt();
+  return count;
+}
+function generate(cfg){
+  const N=cfg.N;
+  const answer=fillSolution(cfg);
+  const puzzle=answer.map(row=>row.slice());
+  const order=shuffle([...Array(N*N)].map((_,i)=>i));
+  let holes=0;
+  for(const idx of order){
+    if(holes>=cfg.holes) break;
+    const r=Math.floor(idx/N), c=idx%N;
+    const bak=puzzle[r][c];
+    if(bak===0) continue;
+    puzzle[r][c]=0;
+    const test=puzzle.map(row=>row.slice());
+    if(countSolutions(test,cfg,2)!==1){
+      puzzle[r][c]=bak;
+    }else{
+      holes++;
+    }
+  }
+  return {puzzle, answer};
+}
+
+function renderMarkPanel(){
+  const panel = document.getElementById("markPanel");
+  const sel = state.selected;
+  if(!sel){
+    panel.innerHTML = "";
+    return;
+  }
+  const {r,c}=sel;
+  const arr = state.markNotes[r][c];
+  if(arr.length===0){
+    panel.innerHTML = "";
+    return;
+  }
+  let html = "";
+  for(const num of arr){
+    html += `<div class="mark-item">${num}</div>`;
+  }
+  panel.innerHTML = html;
+}
+
+// 更新标记面板坐标：棋盘右边界向外2px；垂直对齐选中格子顶部
+function updateMarkPanelPos(r,c){
+  const boardEl = document.getElementById("board");
+  const panel = document.getElementById("markPanel");
+  // 固定取【第一行、最后一列】的格子：整张棋盘右上角单元格
+  const topRightTd = boardEl.querySelector('tr:first-child > td:last-child');
+  if(!topRightTd) return;
+
+  const leftPos = boardEl.offsetLeft + boardEl.offsetWidth + 2;
+  const topPos = topRightTd.offsetTop;
+
+  panel.style.left = leftPos + "px";
+  panel.style.top = topPos + "px";
+}
+
+
+function toggleNoteMode(){
+  state.noteMode = !state.noteMode;
+  renderKeypad();
+}
+
+const keypadEl = document.getElementById("keypad");
+const statusEl = document.getElementById("status");
+const winEl = document.getElementById("win");
+function renderBoard(){
+  const cfg=state.cfg, N=cfg.N;
+  const boardEl = document.getElementById("board");
+  boardEl.innerHTML="";
+  boardEl.style.width="100%";
+  boardEl.style.maxWidth=String(cfg.cell*N)+"px";
+  const trs=[];
+  for(let r=0;r<N;r++){
+    const tds=[];
+    for(let c=0;c<N;c++){
+      const cell=state.grid[r][c];
+      const given=state.given[r][c];
+      let cls="";
+      if(given) cls+=" given"; else if(cell!==0) cls+=" user";
+      if (c === N - 1) {
+        cls += " edge-right";
+      } else if (cfg.bc > 1 && (c + 1) % cfg.bc === 0) {
+        cls += " blk-right";
+      }
+      if (r === N - 1) {
+        cls += " edge-bottom";
+      } else if (cfg.br > 1 && (r + 1) % cfg.br === 0) {
+        cls += " blk-bottom";
+      }
+      if (c === 0) cls += " edge-left";
+      if (cfg.bc > 1 && c % cfg.bc === 0 && c !== 0) cls += " blk-left";
+      if (r === 0) cls += " edge-top";
+      if (cfg.br > 1 && r % cfg.br === 0 && r !== 0) cls += " blk-top";
+      const numStyle = 'style="font-size:'+cfg.font+'px"';
+      tds.push(`<td class="${cls.trim()}" data-r="${r}" data-c="${c}" style="height:${cfg.cell}px">
+        <span class="num" ${numStyle}>${toSym(cell)}</span>
+      </td>`);
+    }
+    trs.push(`<tr>${tds.join("")}</tr>`);
+  }
+  boardEl.innerHTML=trs.join("");
+  applyHighlights();
+}
+function countNum(v){
+  const N=state.cfg.N;
+  let cnt=0;
+  for(let r=0;r<N;r++) for(let c=0;c<N;c++) if(state.grid[r][c]===v) cnt++;
+  return cnt;
+}
+function blockCount(){
+  const cfg=state.cfg;
+  return (cfg.N/cfg.br)*(cfg.N/cfg.bc);
+}
+function renderKeypad(){
+  const cfg=state.cfg;
+  keypadEl.innerHTML="";
+  const total=9;
+  const rows=Math.ceil(total/cfg.keypadRow);
+  for(let k=0;k<rows;k++){
+    const row=document.createElement("div");
+    row.className="row";
+    row.style.gridTemplateColumns=`repeat(${cfg.keypadRow},1fr)`;
+    for(let n=k*cfg.keypadRow+1;n<=Math.min(total,(k+1)*cfg.keypadRow);n++){
+      const b=document.createElement("button");
+      b.textContent=toSym(n);
+      b.dataset.val=n;
+      if(countNum(n)>=blockCount()) b.classList.add("used");
+      row.appendChild(b);
+    }
+    keypadEl.appendChild(row);
+  }
+  const util=document.createElement("div");
+  util.className="util";
+  util.innerHTML=`<button id="undoBtn">擦除</button>\
+  <button id="newBtn">重开</button>\
+  <button id="hintBtn">提示</button>\
+  <button id="noteBtn" ${state.noteMode ? 'class="note-active"' : ''}>标记</button>\
+  <button id="solveBtn">💗快让开，宽哥要显神啦💗</button>`;
+  keypadEl.appendChild(util);
+}
+function applyHighlights(){
+  const boardEl = document.getElementById("board");
+  const cfg=state.cfg, N=cfg.N;
+  const sel=state.selected;
+  let selVal=0;
+  if(sel){
+    const v=state.grid[sel.r][sel.c];
+    selVal=v;
+  }
+  const tds=boardEl.querySelectorAll("td");
+  tds.forEach(td=>{
+    const r=+td.dataset.r, c=+td.dataset.c;
+    const v=state.grid[r][c];
+    td.classList.remove("hl-line","hl-same","selected","error");
+    if(sel){
+      if(r===sel.r || c===sel.c) td.classList.add("hl-line");
+      if(selVal!==0 && v===selVal) td.classList.add("hl-same");
+      if(r===sel.r && c===sel.c) td.classList.add("selected");
+    }
+    if(v!==0 && !isValidAt(r,c,v)) td.classList.add("error");
+  });
+}
+function isValidAt(r,c,v){
+  const cfg=state.cfg,N=cfg.N;
+  for(let i=0;i<N;i++){
+    if(i!==c && state.grid[r][i]===v) return false;
+    if(i!==r && state.grid[i][c]===v) return false;
+  }
+  const r0=Math.floor(r/cfg.br)*cfg.br, c0=Math.floor(c/cfg.bc)*cfg.bc;
+  for(let i=r0;i<r0+cfg.br;i++){
+    for(let j=c0;j<c0+cfg.bc;j++){
+      if((i!==r||j!==c) && state.grid[i][j]===v) return false;
+    }
+  }
+  return true;
+}
+function selectCell(r,c){
+  state.selected={r,c};
+  applyHighlights();
+  renderMarkPanel();
+  updateMarkPanelPos(r,c); // 切换格子更新面板坐标
+}
+function placeNumber(val){
+  const sel=state.selected;
+  if(!sel) return;
+  const {r,c}=sel;
+  if(state.given[r][c]) return;
+
+  if(state.noteMode){
+    const arr = state.markNotes[r][c];
+    const idx = arr.indexOf(val);
+    if(idx >= 0){
+      arr.splice(idx, 1);
+    }else{
+      arr.push(val);
+      arr.sort((a,b)=>a-b);
+    }
+    renderMarkPanel();
+  }else{
+    state.grid[r][c]=val;
+    checkWin();
+    renderBoard();
+    renderKeypad();
+    renderMarkPanel();
+    if(state.selected) updateMarkPanelPos(state.selected.r, state.selected.c);
+  }
+}
+function erase(){
+  const sel=state.selected;
+  if(!sel) return;
+  const {r,c}=sel;
+  if(state.given[r][c]) return;
+  state.grid[r][c]=0;
+  state.markNotes[r][c] = [];
+  renderBoard();
+  renderKeypad();
+  renderMarkPanel();
+  updateMarkPanelPos(r,c);
+}
+function hint(){
+  const sel=state.selected;
+  if(!sel) return;
+  const {r,c}=sel;
+  if(state.given[r][c]) return;
+  state.grid[r][c]=state.answer[r][c];
+  renderBoard();
+  renderKeypad();
+  renderMarkPanel();
+  updateMarkPanelPos(r,c);
+}
+function checkWin(){
+  const N=state.cfg.N;
+  for(let r=0;r<N;r++){
+    for(let c=0;c<N;c++){
+      if(state.grid[r][c]!==state.answer[r][c]){winEl.style.display="none";return;}
+    }
+  }
+  winEl.style.display="block";
+}
+function showAllAnswers(){
+  const N=state.cfg.N;
+  for(let r=0;r<N;r++){
+    for(let c=0;c<N;c++){
+      state.grid[r][c]=state.answer[r][c];
+    }
+  }
+  checkWin();
+  renderBoard();
+  renderKeypad();
+  renderMarkPanel();
+  if(state.selected) updateMarkPanelPos(state.selected.r, state.selected.c);
+}
+function newGame(level){
+  state.level=level;
+  state.cfg=LEVELS[level];
+  const {puzzle,answer}=generate(state.cfg);
+  state.puzzle=puzzle;
+  state.answer=answer;
+  state.grid=puzzle.map(row=>row.slice());
+  state.given=puzzle.map(row=>row.map(v=>v!==0));
+  const N = state.cfg.N;
+  state.markNotes = Array.from({length:N}, ()=> Array.from({length:N}, ()=>[]));
+  state.selected=null;
+  state.noteMode = false;
+  statusEl.textContent=state.cfg.label;
+  winEl.style.display="none";
+  renderKeypad();
+  renderBoard();
+  renderMarkPanel();
+}
+const boardEl = document.getElementById("board");
+boardEl.addEventListener("click",e=>{
+  const td=e.target.closest("td");
+  if(!td) return;
+  selectCell(+td.dataset.r,+td.dataset.c);
+});
+keypadEl.addEventListener("click",e=>{
+  const btn=e.target.closest("button");
+  if(!btn) return;
+  if(btn.id==="undoBtn"){erase();return;}
+  if(btn.id==="newBtn"){newGame(state.level);return;}
+  if(btn.id==="hintBtn"){hint();return;}
+  if(btn.id==="noteBtn"){toggleNoteMode();return;}
+  if(btn.id==="solveBtn"){showAllAnswers();return;}
+  if(btn.dataset.val) placeNumber(+btn.dataset.val);
+});
+document.getElementById("tabs").addEventListener("click",e=>{
+  const btn=e.target.closest("button");
+  if(!btn) return;
+  document.querySelectorAll("#tabs button").forEach(b=>b.classList.remove("active"));
+  btn.classList.add("active");
+  newGame(btn.dataset.level);
+});
+document.addEventListener("keydown",e=>{
+  if(!state.selected) return;
+  const {r,c}=state.selected;
+  if(/^[1-9]$/.test(e.key)){placeNumber(+e.key);}
+  else if(e.key==="Backspace"||e.key==="Delete"){erase();}
+  else if(e.key.startsWith("Arrow")){
+    e.preventDefault();
+    const N=state.cfg.N;
+    let nr=r,nc=c;
+    if(e.key==="ArrowUp") nr=(r-1+N)%N;
+    if(e.key==="ArrowDown") nr=(r+1)%N;
+    if(e.key==="ArrowLeft") nc=(c-1+N)%N;
+    if(e.key==="ArrowRight") nc=(c+1)%N;
+    selectCell(nr,nc);
+  }
+});
+newGame("easy");
+</script>
+</body>
+</html>

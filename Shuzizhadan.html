@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>数字炸弹</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: system-ui, sans-serif;
+        }
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding-top: 80px;
+            background-color: #f4f7fa;
+        }
+        h1 {
+            font-size: 42px;
+            color: #ff4444;
+            margin-bottom: 40px;
+        }
+        .input-wrap {
+            display: flex;
+            gap:12px;
+            margin-bottom:30px;
+        }
+        #guessInput {
+            width: 180px;
+            height:52px;
+            font-size:24px;
+            text-align:center;
+            border: 2px solid #ccc;
+            border-radius: 10px;
+            outline:none;
+        }
+        #guessInput:focus{
+            border-color:#ff4444;
+        }
+        #submitBtn{
+            height:52px;
+            padding:0 24px;
+            border:none;
+            background:#ff4444;
+            color:white;
+            border-radius:10px;
+            font-size:18px;
+            cursor:pointer;
+        }
+        #tipText{
+            font-size:26px;
+            font-weight:bold;
+        }
+        .big{
+            color:#ff6622;
+        }
+        .small{
+            color:#2277ff;
+        }
+        .win{
+            color:#22bb44;
+        }
+        /* 礼花画布铺满全屏，放在最上层 */
+        #fireworkCanvas{
+            position:fixed;
+            top:0;
+            left:0;
+            width:100vw;
+            height:100vh;
+            pointer-events:none;
+            display:none;
+        }
+    </style>
+</head>
+<body>
+    <h1>数字炸弹</h1>
+    <div class="input-wrap">
+        <input type="number" id="guessInput" placeholder="输入1~100数字" min="1" max="100">
+        <button id="submitBtn">猜！</button>
+    </div>
+    <div id="tipText"></div>
+
+    <!-- 礼花画布 -->
+    <canvas id="fireworkCanvas"></canvas>
+
+    <script>
+        // 随机目标数字 1~100
+        const targetNum = Math.floor(Math.random() * 100) + 1;
+        console.log("答案（调试用）：", targetNum); // F12控制台可以看到答案，正式上线可以删掉这行
+
+        const inputEl = document.getElementById('guessInput');
+        const btnEl = document.getElementById('submitBtn');
+        const tipEl = document.getElementById('tipText');
+        const canvas = document.getElementById('fireworkCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // 画布大小适配屏幕
+        function resizeCanvas(){
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+
+        // 点击猜数字
+        btnEl.addEventListener('click', checkNum);
+        // 回车直接提交
+        inputEl.addEventListener('keydown', (e)=>{
+            if(e.key === 'Enter') checkNum();
+        })
+
+        function checkNum(){
+            const value = inputEl.value.trim();
+            const guess = Number(value);
+            tipEl.className = '';
+
+            // 校验
+            if(!value || isNaN(guess)){
+                tipEl.innerText = "⚠️ 请输入有效的整数！";
+                return;
+            }
+            if(guess < 1 || guess > 100){
+                tipEl.innerText = "⚠️ 范围必须是 1 ~ 100";
+                return;
+            }
+
+            // 判断大小
+            if(guess > targetNum){
+                tipEl.innerText = "📈 输入的大了！再小一点";
+                tipEl.className = "big";
+            }else if(guess < targetNum){
+                tipEl.innerText = "📉 输入的小了！再大一点";
+                tipEl.className = "small";
+            }else{
+                tipEl.innerText = "🎉 恭喜！猜对数字炸弹！";
+                tipEl.className = "win";
+                startFirework(); // 启动礼花爆炸
+            }
+            inputEl.value = '';
+            inputEl.focus();
+        }
+
+
+        // ========== 礼花动画代码 ==========
+        let fireworks = [];
+        class Firework{
+            constructor(x,y){
+                this.x = x;
+                this.y = y;
+                this.particles = [];
+                const count = 80;
+                for(let i=0;i<count;i++){
+                    const angle = Math.PI * 2 / count * i;
+                    const speed = Math.random()*4 +2;
+                    this.particles.push({
+                        x:x,
+                        y:y,
+                        vx: Math.cos(angle)*speed,
+                        vy: Math.sin(angle)*speed,
+                        alpha:1,
+                        color: `hsl(${Math.random()*360},100%,60%)`
+                    })
+                }
+            }
+            update(){
+                for(const p of this.particles){
+                    p.x += p.vx;
+                    p.y += p.vy;
+                    p.vy += 0.04;
+                    p.alpha -= 0.012;
+                }
+                return this.particles[0].alpha > 0;
+            }
+            draw(){
+                for(const p of this.particles){
+                    ctx.save();
+                    ctx.globalAlpha = p.alpha;
+                    ctx.fillStyle = p.color;
+                    ctx.beginPath();
+                    ctx.arc(p.x,p.y,3,0,Math.PI*2);
+                    ctx.fill();
+                    ctx.restore();
+                }
+            }
+        }
+
+        function startFirework(){
+            canvas.style.display = "block";
+            // 在屏幕多个位置爆出礼花
+            fireworks.push(new Firework(canvas.width/2, canvas.height/3));
+            fireworks.push(new Firework(canvas.width*0.25, canvas.height/2));
+            fireworks.push(new Firework(canvas.width*0.75, canvas.height/2));
+            animate();
+        }
+
+        function animate(){
+            ctx.clearRect(0,0,canvas.width,canvas.height);
+            fireworks = fireworks.filter(fw=>{
+                fw.draw();
+                return fw.update();
+            })
+            if(fireworks.length >0){
+                requestAnimationFrame(animate);
+            }else{
+                canvas.style.display = "none";
+            }
+        }
+    </script>
+</body>
+</html>
