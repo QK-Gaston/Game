@@ -30,23 +30,25 @@
   .top-wrap{
     width:100%;
     display:grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: auto 1fr auto;
     align-items:center;
     margin-bottom:10px;
   }
   .top-left{
     text-align:left;
   }
-  .top-center{
-    text-align:center;
-  }
+ .top-center{
+  text-align:center;
+  min-width: max-content;
+}
+
   .top-right{
     text-align:right;
   }
   header{width:100%;display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
-  h1{font-size:20px;font-weight:700;}
-  .love-tip{font-size:20px;color:#eb7fb8;white-space:nowrap；}
-  .status{font-size:15px;color:#666;}
+  h1{font-size:18px;font-weight:700;}
+  .love-tip{font-size:20px;color:#eb7fb8;white-space:nowrap;}
+  .status{font-size:18px;color:#666;}
  
 
 
